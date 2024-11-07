@@ -1,17 +1,16 @@
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.edge.options import Options
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException,NoSuchElementException,StaleElementReferenceException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from tkinter import PhotoImage
+from selenium.webdriver.common.action_chains import ActionChains
 from tkinter import filedialog, messagebox,simpledialog
 from openpyxl.styles import PatternFill,Font, Alignment,Side,Border
 from openpyxl import load_workbook
-import openpyxl,os,time,re,sys
+import openpyxl,os,time,re,sys,shutil
 import pandas as pd 
 import tkinter as tk
 import win32com.client as win32
@@ -19,6 +18,7 @@ import win32com.client as win32
 
 
 ARIBA_URL="http://covestro-child1.procurement-eu.ariba.com/"
+ARIBA_ADMIN_DIC={'CVTWX':'cassie.song@covestro.com','CVSBZ':'charlotte.chen@covestro.com','CXGUQ':'michelle.zhang@covestro.com','CVSYX':'peng.gao@covestro.com'}
 ARIBA_ADMIN_LIST=['CVTWX','CVSBZ','CXGUQ']
 CURRENCY_LISTS=['USD','EUR','TWD','CNY','JPY','HKD','THB']
 EXCLUDE_TYPE_LISTS=['Punchout L2','Punchout L1','WIP Work in Progress']
@@ -29,12 +29,12 @@ STANDARD_COLUMNS = ['Supplier ID', 'Supplier Part ID', 'Item Description', 'Unit
 class Ariba_Auto:
     def __init__(self):
         self.ariba_site=ARIBA_URL
-        self.mgs_4_check=[]
-        self.cat_items=[]
-        self.delegate_status=True
+        #self.cat_items=[]
+        #self.upload_list=[]
+        #self.delegate_status=True
         self.cat_status=False
-        self.download_status=True
-        self.compare_status=True
+        self.mail_status=False
+        self.compare_status=False
         self.user_account=os.getenv('USERNAME')
         self.init_check()
 
@@ -83,6 +83,14 @@ class Ariba_Auto:
         else:
             messagebox.showerror("File Not Found", "You need to build the config list first")
             sys.exit("Initialization failed: config list not found.")
+        # this is for further distribution of program for end-users 
+        user_home = os.path.expanduser("~")
+        extracted_config_path = os.path.join(user_home, "config.xlsx")
+        if not os.path.exists(extracted_config_path):
+            shutil.copy(config_list, extracted_config_path)
+            print(f"Extracted config.xlsx to {extracted_config_path}")
+        self.config_list=extracted_config_path
+        self.uom_prefer_list()
 
         download_dir = os.path.join(report_path,"Download") 
         if not os.path.exists(download_dir):
@@ -136,29 +144,32 @@ class Ariba_Auto:
     def file_select(self):
         root=tk.Tk()
         root.withdraw()
-        self.file_path=filedialog.askopenfilename(
+        file_path=filedialog.askopenfilename(
             title="Please Select the Catalogue",
-            filetypes=[("Excel files","*.xlsx *.xls")]
-        )
+            filetypes=[("Excel files","*.xlsx *.xls")])
+        return file_path
     """
-    mode 0: get the requirements for MG
+    get the requirements for MG --  just to check if mg in Ariba MG list
     """
     def mg_list_get(self):
-        if self.file_path:
-            mgs=self.mgs_4_check
-            input_flag=False
-            while True:
-                mg=simpledialog.askstring("Input","Please Enter the MGs for Check")
-                if not mg and input_flag:
-                    break
-                elif mg and mg.isdigit() and len(mg)==8:
-                    mgs.append(mg)
-                    input_flag=True
-                else:
-                    messagebox.showerror("Invalid Input", "Please Enter the Right MG")
-            self.mgs_4_check=mgs
+        if self.config_list:
+            requirement_df=pd.read_excel(self.config_list,sheet_name='mglist')
+            mgs_4_check=requirement_df['UniqueName'].to_list()
+            return mgs_4_check
+            # mgs=self.mgs_4_check
+            # input_flag=False
+            # while True:
+            #     mg=simpledialog.askstring("Input","Please Enter the MGs for Check")
+            #     if not mg and input_flag:
+            #         break
+            #     elif mg and mg.isdigit() and len(mg)==8:
+            #         mgs.append(mg)
+            #         input_flag=True
+            #     else:
+            #         messagebox.showerror("Invalid Input", "Please Enter the Right MG")
+            # self.mgs_4_check=mgs
         else:
-            messagebox.showwarning("No File Selected", "Please select an Excel file to proceed.")
+            sys.exit("No Config List", "Please check your config list file")
 
 
     """
@@ -168,32 +179,36 @@ class Ariba_Auto:
     """
     def static_cat_quality_check(self,mode=0):
         self.uom_prefer_list()
+        mg_list=self.mg_list_get()
         if mode==0:
-            self.file_select()
-            self.mg_list_get()
+            file_path=self.file_select()
+            
             print(f"In mode {mode}, all the rquirements for quality check have been get")          
-            self.loop_excel_check(self.file_path)
+            self.loop_excel_check(file_path)
         elif mode==1:
             requirement_df=pd.read_excel(self.config_list,sheet_name='quality')
             print(f"In mode {mode}, all the rquirements for quality check have been get")      
             for _,row in requirement_df.iterrows():
-                self.file_path=row['Route']
+                file_path=row['Route']
                 if not self.file_path:
                     messagebox.showerror("File Not Found", "Please input the file route in the config file")
                     return
-                mg_value=str(row['MG'])
-                if pd.notnull(mg_value):
-                    self.mgs_4_check=mg_value.split(';')
-                print(self.mgs_4_check)
-                self.loop_excel_check(self.file_path)
+                self.loop_excel_check(file_path)
+        if self.cat_status:
+            messagebox.showinfo("Job Done", "You can upload the files") 
+        else:
+            messagebox.showinfo("Warning", "Modify the files before upload") 
+        self.cat_status=False
     """
     Quality check in the excel
     """
     def loop_excel_check(self,path):
         if path:
+            _, filename = os.path.split(path)
             workbook = openpyxl.load_workbook(path)
             sheet = workbook.active
             fill = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")
+            normal_fill = PatternFill()
             erro_count=0
             for row in sheet.iter_rows(min_row=3, max_row=sheet.max_row, min_col=1, max_col=10):
                 supplier_id = row[0].value  # Column A
@@ -203,40 +218,62 @@ class Ariba_Auto:
                 class_codes=row[6].value
                 mg_no=str(row[7].value)
                 currency_value = row[9].value  # Column J
-
-                if not (isinstance(supplier_id, str) and supplier_id.isdigit() and len(supplier_id) == 10):
-                    row[0].fill = fill
-                    erro_count+=1
-                
+                if 'INT'.lower() in filename.lower():
+                    if not (isinstance(supplier_id, str) and supplier_id.isdigit() and len(supplier_id) == 10):
+                        row[0].fill = fill
+                        erro_count+=1
+                    else:
+                        row[0].fill=normal_fill
+                elif 'EXT'.lower() in filename.lower():
+                    if not (isinstance(supplier_id, str) and re.match(r'^AN\d{11}$', supplier_id)):
+                        row[0].fill = fill
+                        erro_count+=1
+                    else:
+                        row[0].fill=normal_fill
                 if not (len(part_id)<255 and part_id):
                     row[1].fill = fill 
                     erro_count+=1
+                else:
+                    row[1].fill=normal_fill
 
                 if uom not in self.uom_list:
                     row[4].fill = fill 
                     erro_count+=1
+                else:
+                    row[4].fill=normal_fill
 
                 if not (len(short_name)<=40 and short_name):
                     row[5].fill = fill 
                     erro_count+=1
+                else:
+                    row[5].fill=normal_fill
                 
                 if not(class_codes=='custom'):
                     row[6].fill = fill 
                     erro_count+=1
+                else:
+                    row[6].fill=normal_fill
                 
                 if mg_no not in self.mgs_4_check:
+                    print(mg_no)
                     row[7].fill = fill 
                     erro_count+=1
+                else:
+                    row[7].fill=normal_fill
 
                 if not(currency_value in CURRENCY_LISTS):
                     row[8].fill = fill 
                     erro_count+=1
+                else:
+                    row[8].fill=normal_fill
 
             if erro_count==0:
                 self.cat_status=True 
+                #messagebox.showinfo("Job Done", "You can upload the file") 
                 print(f'This file {path} is ready for upload')
             else:
                 print(f'This file {path} needs to be modified before upload')
+                #messagebox.showinfo("Warning", "You need to modify the file") 
             
             # directory, filename = os.path.split(path)
 
@@ -278,7 +315,28 @@ class Ariba_Auto:
             })
         service = Service(self.driver_path)
         driver = webdriver.Edge(service=service,options=options)
+        self.driver=driver
         driver.get(self.ariba_site)
+        # need to judge whether a pop up window for different account sign-in
+        try:
+            # Check if the page title is "Sign in to your account"
+            WebDriverWait(self.driver, 5).until(
+                EC.title_contains("Sign in to your account")
+            )
+            print("Sign in page detected.")
+            # Perform sign-in actions here
+            log_account= ARIBA_ADMIN_DIC[self.user_account]
+            email_element = WebDriverWait(self.driver, 20).until(EC.presence_of_element_located((By.XPATH, f"//small[text()='{log_account}']")))
+    # Find the parent element that needs to be clicked
+            parent_element = email_element.find_element(By.XPATH, "./ancestor::div[@class='table-row']")
+    # Click the parent element
+            parent_element.click()
+            print(f"Already Sign in with account {log_account}.")
+            print("==========================================")
+        except TimeoutException:
+            print("Sign in page not detected.")
+            print("==========================================")
+
         try:
             WebDriverWait(driver, 20).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
@@ -287,7 +345,7 @@ class Ariba_Auto:
             print("==========================================")
         except TimeoutException:
             messagebox.showwarning("Connection Problem", "Please Retry the program")  
-        self.driver=driver
+        
 
     """
     Log out of Ariba Site
@@ -303,7 +361,7 @@ class Ariba_Auto:
 
     """
     
-    def wait_and_click(self, by, value, timeout=20):
+    def wait_and_click(self, by, value, timeout=20,type=0):
         try:
             if self.is_element_in_iframe(by,value):
                 iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
@@ -316,11 +374,15 @@ class Ariba_Auto:
                         self.driver.switch_to.default_content()
                         continue
             element = WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located((by, value))
+                EC.element_to_be_clickable((by, value))
             )
             element.click()
         except TimeoutException:
-            messagebox.showwarning("Connection Problem", f"Element with {by}={value} not found within {timeout} seconds.")
+            #type==0 for general purpose, will pop up the warning
+            if type==0:
+                messagebox.showwarning("Connection Problem", f"Element with {by}={value} not found within {timeout} seconds.")
+            elif type==1:
+                pass
     
     """
     To judge if element is in a iframe
@@ -395,48 +457,71 @@ class Ariba_Auto:
                 for _ in range(100): 
                     delegate_element.click()
             except TimeoutException:
-                messagebox.showwarning("Auth. Problem", "you don't have the auth.")
-                self.delegate_status=False
+                sys.exit("Auth. Problem: You are not authorized.")
             except ElementClickInterceptedException:
                 driver.execute_script("arguments[0].click();", delegate_element)
             except StaleElementReferenceException:
                 pass
+        #also need to judge whether account has delegate the account to others
+        elif self.user_account in ARIBA_ADMIN_LIST and driver:
+            try:
+                delegate_element = WebDriverWait(driver, timeout=5).until(
+                    EC.element_to_be_clickable((By.LINK_TEXT, "Continue"))
+                )
+                for _ in range(100):
+                    try:
+                        delegate_element.click()
+                        break  # Exit the loop if click is successful
+                    except ElementClickInterceptedException:
+                        # Use JavaScript to click if intercepted
+                        self.driver.execute_script("arguments[0].click();", delegate_element)
+                    except StaleElementReferenceException:
+                        # Re-find the element if it becomes stale
+                        delegate_element = WebDriverWait(self.driver, timeout=5).until(
+                            EC.element_to_be_clickable((By.LINK_TEXT, "Continue"))
+                        )
+            except TimeoutException:
+                print("User didn't delegate the account")
         
-        if self.delegate_status:
+        
             #Wait for the button to be present
-            continue_button = WebDriverWait(driver, timeout).until(
-                EC.presence_of_element_located((By.ID, "_bf7aib"))
-            )
-            # Click the button
-            continue_button.click()
-            WebDriverWait(driver,timeout)
-            driver.maximize_window()
-            if flag==0:
-                actions = [
-                    (By.ID, "_dbw$v"),  # Site link
-                    (By.ID, "__uxijd"),  # Pop-up element
-                    (By.ID, "_s2d3v"),  # Manage link
-                    (By.ID, "_llzkf"),  # Core Administration link
-                    (By.ID, "_6xw98d"),  # Catalog Manager link
-                    (By.ID, "_xzb03d")   # Catalogs link
-                ]
-            elif flag==1:
-                actions = [
-                    (By.ID, "_dbw$v"),  # Site link
-                    (By.ID, "__uxijd"),  # Pop-up element
-                    (By.ID, "_s2d3v"),  # Manage link
-                    (By.ID, "_llzkf"),  # Core Administration link
-                    (By.ID, "_rrfnsb"),  # Catalog content Manager link
-                    (By.ID, "_apbzq")   # Content Documents link
-                ]
+        continue_button = WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.ID, "_bf7aib")))
+        # Click the button
+        continue_button.click()
+        WebDriverWait(driver,timeout)
+        driver.maximize_window()
+        if flag==0:
+            actions = [
+                (By.ID, "_dbw$v"),  # Site link
+                (By.ID, "__uxijd"),  # Pop-up element
+                (By.ID, "_s2d3v"),  # Manage link
+                (By.CSS_SELECTOR, 'a[title="Core Administration"]'),  # Core Administration link
+                (By.CSS_SELECTOR, 'a[title="Catalog Manager"]'),# Catalog Manager link
+                #(By.ID, "_6xw98d"),  # Catalog Manager link
+                #(By.ID, "_xzb03d")   # Catalogs link
+                (By.LINK_TEXT, "Catalogs") # Catalogs link
+            ]
+            for by,value in actions:
+                self.wait_and_click(by,value)
+        elif flag==1:
+            actions = [
+                (By.ID, "_dbw$v"),  # Site link
+                (By.ID, "__uxijd"),  # Pop-up element
+                (By.ID, "_s2d3v"),  # Manage link
+                (By.CSS_SELECTOR, 'a[title="Core Administration"]'),  # Core Administration link
+                (By.CSS_SELECTOR, 'a[title="Catalog Content Manager"]'),# Catalog content Manager link
+                #(By.ID, "_rrfnsb"),  # Catalog content Manager link
+                (By.LINK_TEXT, "Content Documents") # Catalogs link
+                #(By.ID, "_apbzq")   # Content Documents link
+            ]
 
             for by,value in actions:
                 self.wait_and_click(by,value)
             
             iframe_locator = (By.TAG_NAME, "iframe")
             WebDriverWait(driver, timeout).until(
-                EC.presence_of_element_located(iframe_locator)
-            )
+                EC.presence_of_element_located(iframe_locator))
 
             # Check if the iframe element is loaded
             iframe_loaded = self.is_element_in_iframe(By.ID, "content-grid")
@@ -445,60 +530,107 @@ class Ariba_Auto:
             else:
                 print("Iframe element is not loaded.")
             
-            print("Already reach the page, waiting for further action")
-            print("==========================================")
+        print("Already reach the page, waiting for further action")
+        print("==========================================")
     
     """
     This part needs to be check with Cassie
 
     """
     
-    def ariba_cat_upload(self,mode=0,timeout=20):
+    def ariba_cat_upload(self,mode=0):
         driver=self.driver
-        cat_lists=self.cat_items
-        input_flag=False
-        while True:
-            cat_list=simpledialog.askstring("Input","Please Enter the Catalog Name for Search")
-            if not cat_list and input_flag:
-                break
-            else:
-                cat_lists.append(cat_list)
-                input_flag=True
-        
-        for cat_name in cat_lists:
+        if mode==0:
+            cat_lists=[]
+            upload_lists=[]
+            while True:
+                cat_list=simpledialog.askstring("Input","Please Enter the Catalog Name for Search")
+                root=tk.Tk()
+                root.withdraw()
+                upload_list=filedialog.askopenfilename(title="Please Select the Catalogue",filetypes=[("Excel files","*.xlsx *.xls")])
+                if not cat_list and not upload_list and len(cat_lists)>=1 and len(upload_lists)>=1:
+                    break
+                elif not cat_list or not upload_list:
+                    messagebox.showwarning("Warning", "In current mode, you need to input the cat and choose the file for uploading")
+                else:
+                    cat_lists.append(cat_list)
+                    upload_lists.append(upload_list)
+
+        elif mode==1:
+            requirement_df=pd.read_excel(self.config_list,sheet_name='quality')  
+            cat_lists=requirement_df['Catalog Subscription Name '].to_list()
+            upload_lists=requirement_df['Route'].to_list()
+            if not cat_lists or not upload_lists:
+                messagebox.showwarning("Warning", "Please check your config document")
+                return
+        error_log_path=os.path.join(self.download_dir, 'error_config.txt')
+        with open(error_log_path, 'w', encoding='utf-8') as log_file:
+            pass
+        count=0
+        for cat_name,file_path in zip(cat_lists,upload_lists):
             self.input_and_search(By.ID,"_yxophd",cat_name)
             self.wait_and_click(By.ID, "_xvmt6c")
             try:
-                no_items_element = WebDriverWait(driver, timeout).until(
+                WebDriverWait(driver, timeout=5).until(
                     EC.presence_of_element_located((By.XPATH, '//td[@class="empty tableBody w-tbl-empty" and text()="No items"]'))
                 )
+                error_message=(f"{cat_name} not found")
+                print(error_message.strip())
+                with open(error_log_path,'a', encoding='utf-8') as log_file:
+                    log_file.write(error_message +'\n')
                 continue
+                
             except TimeoutException:
-                table = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "_nb8ucc")))
-                rows = table.find_elements(By.XPATH, './/tr[contains(@class, "tableRow1")]')
-                for row in rows:
-                    try:
-                        status = row.find_element(By.XPATH, './/td[@class="tableBody w-tbl-cell"]//a[@id="_lfned"]').text
-                        if status == "Activated":
-                            version_link = row.find_element(By.XPATH, './/td[@class="tableBody w-tbl-cell"]//a[@id="_ybfsed"]')
-                            version_link.click()
-                            # print("Clicked the version link for the first activated row")
-                            break
-                    except NoSuchElementException:
-                        continue
-                self.static_cat_quality_check(mode=mode)
-                if self.cat_status:
-                    self.wait_and_click(By.ID, "__yzepd")
-                    try:
-                        file_input = WebDriverWait(driver, 20).until(
-                            EC.presence_of_element_located((By.NAME, "_9cv$dc")))
-                        file_input.send_keys(self.file_path)
+                try:
+                    table = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "_nb8ucc")))
+                    first_version_link = table.find_element(By.XPATH, ".//a[contains(text(), 'Version')]") 
+                    first_version_link.click()
+                except NoSuchElementException:
+                    continue
+                # rows = table.find_elements(By.XPATH, './/tr[contains(@class, "tableRow1")]')
+                # for row in rows:
+                #     try:
+                #         status = row.find_element(By.XPATH, './/td[@class="tableBody w-tbl-cell"]//a[@id="_lfned"]').text
+                #         # if status == "Activated":
+                #         version_link = row.find_element(By.XPATH, './/td[@class="tableBody w-tbl-cell"]//a[@id="_ybfsed"]')
+                #         version_link.click()
+                #         # print("Clicked the version link for the first activated row")
+                #         break
+                #     except NoSuchElementException:
+                #         continue
+                
+                #***according to Cassie, no need to check the quality again here***
+                #self.static_cat_quality_check(mode=mode)
+                #if self.cat_status:
+                
+                try:
+                    import_tool_element = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//span[@title='Import tool']")))
+                    import_tool_element.click()
+                    file_input_element = WebDriverWait(driver, 20).until(
+                        EC.presence_of_element_located((By.XPATH, "//span[@class='w-file-upload']//input[@type='file']"))
+                    )
+                    file_input_element.send_keys(file_path)
+                    count=count+1
 
-                    except TimeoutException:
-                        pass
-                    print(f"File {cat_name} already uploaded")
+                except TimeoutException:
+                    pass
+                print(f"File {cat_name} already uploaded")
+
+                # catalog_home_button = WebDriverWait(driver, 20).until(
+                # EC.presence_of_element_located((By.XPATH, "//button[span[text()='Catalog Home']]")))
+                catalog_home_button = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.XPATH, "//button[@title='Return to the catalog main screen']")))
+                catalog_home_button.click()
+                # *********to click the upload 
+                # import_button = WebDriverWait(driver, 20).until(
+                # EC.presence_of_element_located((By.XPATH, "//button[@title='Import new data']")))
+                # actions = ActionChains(driver)
+                # actions.move_to_element(import_button).perform()
+                # import_button = WebDriverWait(driver, 20).until(
+                #     EC.element_to_be_clickable((By.XPATH, "//button[@title='Import new data']")))
+                # import_button.click()
         
         print("==========================================")
+        messagebox.showinfo("Uploaded Success",f"{count} files have been uploaded")
     
     """
     Downloading file function and support function 
@@ -531,14 +663,14 @@ class Ariba_Auto:
                 print("Download completed successfully.")
                 
             else:
-                self.download_status=False
+                #self.download_status=False
                 raise Exception("Download timed out.")
         elif mode==1:
             if self.wait_for_download(self.download_all_dir):
                 print("Download completed successfully.")
                 
             else:
-                self.download_status=False
+                #self.download_status=False
                 raise Exception("Download timed out.")
             
 
@@ -612,7 +744,7 @@ class Ariba_Auto:
                 
         print(f"Total Cat {len(cat_lists)}")
         error_log_path=os.path.join(self.download_all_dir, 'error_log.txt')
-        with open(error_log_path, 'w') as log_file:
+        with open(error_log_path, 'w', encoding='utf-8') as log_file:
             pass  # This will clear the file
 
         for cat_name in cat_lists:
@@ -665,11 +797,22 @@ class Ariba_Auto:
             except TimeoutException:
                 error_message=(f"{cat_name} not found within {timeout} seconds")
                 print(error_message.strip())
-                with open(error_log_path,'a') as log_file:
+                with open(error_log_path,'a', encoding='utf-8') as log_file:
                     log_file.write(error_message +'\n')
             except Exception as e:
                 print(f"An error occurred: {e}")
-        self.cat_merge(mode=mode)
+        if mode==0:
+            if self.mail_status:
+                messagebox.showinfo("Change Report","Reports Generated And Sent")
+            else:
+                messagebox.showinfo("Change Report","Change Report No Need")
+            self.mail_status=False
+        elif mode==1:
+            self.cat_merge(mode=mode)
+            messagebox.showinfo("Merge Report","Merge Reports Generated")
+        
+        self.mail_status=False
+        self.compare_status=False
     
     def cat_merge(self,mode=1):
         if mode==1: 
@@ -747,7 +890,7 @@ class Ariba_Auto:
         return result
 
     def ariba_cat_compare(self):
-        if self.download_status and self.compare_status:
+        if self.compare_status:
             file=self.get_downloaded_files(self.download_dir)
             if file and len(file) == 2:
                 # Read the downloaded Excel files with Pandas
@@ -886,8 +1029,9 @@ class Ariba_Auto:
             
             # Attach the file
             mail.Attachments.Add(attachment_path)
-            
+            mail.Display()
             # Send the email
-            mail.Send()
+            #mail.Send()
             print(f"Email sent to {email_add}")
+            self.mail_status=True
 
