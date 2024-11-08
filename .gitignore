@@ -3,3 +3,4 @@
 *.mmap
 test.ipynb
 .spec
+.txt
