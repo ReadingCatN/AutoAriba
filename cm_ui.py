@@ -1,6 +1,7 @@
 from tkinter import PhotoImage
 import tkinter as tk
 import os
+import sys
 
 class CM_UI:
     def __init__(self, my_instance):
@@ -14,8 +15,12 @@ class CM_UI:
         self.root.geometry("400x300")
         self.root.configure(bg="lightblue")
         base_path = self.my_instance.base_path_get()
-        asset_path = os.path.join(base_path, "asset")
-        cov_path = os.path.join(asset_path, "cov.png")
+        if self.my_instance.running_status=='exe':
+            asset_temp_path=os.path.join(sys._MEIPASS, "asset")
+            cov_path = os.path.join(asset_temp_path, "cov.png")
+        else:
+            asset_path = os.path.join(base_path, "asset")
+            cov_path = os.path.join(asset_path, "cov.png")
         icon = PhotoImage(file=cov_path)
         self.root.iconphoto(False, icon)
         self.button_width = 20

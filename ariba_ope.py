@@ -43,13 +43,20 @@ class Ariba_Auto:
     def base_path_get(self):
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
+            self.running_status='exe'
         else:
             base_path = os.path.abspath(".")
+            self.running_status='script'
         return base_path
 
     def init_check(self):
         base_path=self.base_path_get()
+        # if self.running_status == 'exe':
+        # # When running as an .exe, files are in a temporary directory
+        #     asset_path = os.path.join(sys._MEIPASS, "asset")
+        # else:
         asset_path = os.path.join(base_path, "asset")
+        
         report_path=os.path.join(base_path,"report")
 
         cat_onedriver_shortcut=rf'C:\Users\{self.user_account}\OneDrive - Covestro\Catalogs\Catalog Tracker.xlsx'
@@ -66,10 +73,13 @@ class Ariba_Auto:
         if os.path.exists(edge_drive_path):
             print("Edge Driver File Check")
             print("==========================================")
-            self.driver_path=edge_drive_path
-        else:
+        elif self.running_status=='exe':
+            asset_temp_path=os.path.join(sys._MEIPASS, "asset")
+            edge_drive_path=os.path.join(asset_temp_path,"edgedriver.exe")
+        elif self.running_status=='script':
             messagebox.showerror("File Not Found", "Edge Driver needs to be downloaded first")
             sys.exit("Initialization failed: edge driver not found.")
+        self.driver_path=edge_drive_path
         
         config_list=os.path.join(asset_path, "config.xlsx") 
         if os.path.exists(config_list):
@@ -77,17 +87,19 @@ class Ariba_Auto:
             print("==========================================")
             self.config_list=config_list
             self.uom_prefer_list()
-        else:
+        elif self.running_status == 'script':
             messagebox.showerror("File Not Found", "You need to build the config list first")
             sys.exit("Initialization failed: config list not found.")
         # this is for further distribution of program for end-users 
-        user_home = os.path.expanduser("~")
-        extracted_config_path = os.path.join(user_home, "config.xlsx")
-        if not os.path.exists(extracted_config_path):
-            shutil.copy(config_list, extracted_config_path)
-            print(f"Extracted config.xlsx to {extracted_config_path}")
-        self.config_list=extracted_config_path
-        self.uom_prefer_list()
+        elif self.running_status == 'exe':
+            extracted_config_path = os.path.join(base_path, "config.xlsx")
+            if not os.path.exists(extracted_config_path):
+                asset_temp_path=os.path.join(sys._MEIPASS, "asset")
+                config_temp_list=os.path.join(asset_temp_path,"config.xlsx")
+                shutil.copy(config_temp_list, extracted_config_path)
+                print(f"Extracted config.xlsx to {extracted_config_path}")
+            self.config_list = extracted_config_path
+            self.uom_prefer_list()
 
         download_dir = os.path.join(report_path,"Download") 
         if not os.path.exists(download_dir):
@@ -209,7 +221,7 @@ class Ariba_Auto:
             erro_count=0
             for row in sheet.iter_rows(min_row=3, max_row=sheet.max_row, min_col=1, max_col=10):
                 supplier_id = row[0].value  # Column A
-                part_id=row[1].value #column B 
+                part_id=str(row[1].value) #column B 
                 uom=row[4].value
                 short_name=row[5].value
                 class_codes=row[6].value
@@ -252,7 +264,6 @@ class Ariba_Auto:
                     row[6].fill=normal_fill
                 
                 if mg_no not in mg_lists:
-                    print(mg_no)
                     row[7].fill = fill 
                     erro_count+=1
                 else:
@@ -482,10 +493,13 @@ class Ariba_Auto:
         
         
             #Wait for the button to be present
-        continue_button = WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.ID, "_bf7aib")))
+        try:
+            continue_button = WebDriverWait(driver, timeout).until(
+                EC.presence_of_element_located((By.ID, "_bf7aib")))
         # Click the button
-        continue_button.click()
+            continue_button.click()
+        except TimeoutException:
+            print('User dont have OK confirmation')
         WebDriverWait(driver,timeout)
         driver.maximize_window()
         if flag==0:
