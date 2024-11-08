@@ -6,7 +6,7 @@ from selenium.common.exceptions import TimeoutException, ElementClickIntercepted
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
+#from selenium.webdriver.common.action_chains import ActionChains
 from tkinter import filedialog, messagebox,simpledialog
 from openpyxl.styles import PatternFill,Font, Alignment,Side,Border
 from openpyxl import load_workbook
@@ -29,9 +29,6 @@ STANDARD_COLUMNS = ['Supplier ID', 'Supplier Part ID', 'Item Description', 'Unit
 class Ariba_Auto:
     def __init__(self):
         self.ariba_site=ARIBA_URL
-        #self.cat_items=[]
-        #self.upload_list=[]
-        #self.delegate_status=True
         self.cat_status=False
         self.mail_status=False
         self.compare_status=False
@@ -45,7 +42,7 @@ class Ariba_Auto:
     """
     def base_path_get(self):
         if getattr(sys, 'frozen', False):
-            base_path = sys._MEIPASS
+            base_path = os.path.dirname(sys.executable)
         else:
             base_path = os.path.abspath(".")
         return base_path
@@ -179,12 +176,12 @@ class Ariba_Auto:
     """
     def static_cat_quality_check(self,mode=0):
         self.uom_prefer_list()
-        mg_list=self.mg_list_get()
+        mg_lists=self.mg_list_get()
         if mode==0:
             file_path=self.file_select()
             
             print(f"In mode {mode}, all the rquirements for quality check have been get")          
-            self.loop_excel_check(file_path)
+            self.loop_excel_check(file_path,mg_lists)
         elif mode==1:
             requirement_df=pd.read_excel(self.config_list,sheet_name='quality')
             print(f"In mode {mode}, all the rquirements for quality check have been get")      
@@ -193,7 +190,7 @@ class Ariba_Auto:
                 if not self.file_path:
                     messagebox.showerror("File Not Found", "Please input the file route in the config file")
                     return
-                self.loop_excel_check(file_path)
+                self.loop_excel_check(file_path,mg_lists)
         if self.cat_status:
             messagebox.showinfo("Job Done", "You can upload the files") 
         else:
@@ -202,7 +199,7 @@ class Ariba_Auto:
     """
     Quality check in the excel
     """
-    def loop_excel_check(self,path):
+    def loop_excel_check(self,path,mg_lists):
         if path:
             _, filename = os.path.split(path)
             workbook = openpyxl.load_workbook(path)
@@ -254,7 +251,7 @@ class Ariba_Auto:
                 else:
                     row[6].fill=normal_fill
                 
-                if mg_no not in self.mgs_4_check:
+                if mg_no not in mg_lists:
                     print(mg_no)
                     row[7].fill = fill 
                     erro_count+=1
@@ -717,7 +714,7 @@ class Ariba_Auto:
 
     def ariba_cat_download(self,mode=0,input_type=0,timeout=10):
         driver=self.driver
-        cat_lists=self.cat_items
+        cat_lists=[]
         if input_type==0:
             input_flag=False
             while True:
@@ -1033,5 +1030,5 @@ class Ariba_Auto:
             # Send the email
             #mail.Send()
             print(f"Email sent to {email_add}")
-            self.mail_status=True
+        self.mail_status=True
 

@@ -1,1 +1,5 @@
 *.xlsx
+*.docx
+*.mmap
+test.ipynb
+.spec
