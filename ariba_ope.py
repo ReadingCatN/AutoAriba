@@ -1,3 +1,4 @@
+from msilib.schema import Directory
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.edge.options import Options
@@ -10,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from tkinter import filedialog, messagebox,simpledialog
 from openpyxl.styles import PatternFill,Font, Alignment,Side,Border
 from openpyxl import load_workbook
-import openpyxl,os,time,re,sys,shutil
+import openpyxl,os,time,re,sys,shutil,unicodedata,glob
 import pandas as pd 
 import tkinter as tk
 import win32com.client as win32
@@ -211,6 +212,9 @@ class Ariba_Auto:
     """
     Quality check in the excel
     """
+    def get_character_count(self,text):
+        return sum(1 for char in text if unicodedata.category(char) != 'Cn')
+
     def loop_excel_check(self,path,mg_lists):
         if path:
             _, filename = os.path.split(path)
@@ -251,7 +255,7 @@ class Ariba_Auto:
                 else:
                     row[4].fill=normal_fill
 
-                if not (len(short_name)<=40 and short_name):
+                if not (self.get_character_count(short_name) <= 40 and short_name):
                     row[5].fill = fill 
                     erro_count+=1
                 else:
@@ -474,20 +478,17 @@ class Ariba_Auto:
         elif self.user_account in ARIBA_ADMIN_LIST and driver:
             try:
                 delegate_element = WebDriverWait(driver, timeout=5).until(
-                    EC.element_to_be_clickable((By.LINK_TEXT, "Continue"))
+                    EC.element_to_be_clickable((By.XPATH, "//table[@class='w-arw-page-template']//div[@class='pageHead w-page-head' and contains(text(), 'Delegation')]"))
                 )
-                for _ in range(100):
-                    try:
-                        delegate_element.click()
-                        break  # Exit the loop if click is successful
-                    except ElementClickInterceptedException:
-                        # Use JavaScript to click if intercepted
-                        self.driver.execute_script("arguments[0].click();", delegate_element)
-                    except StaleElementReferenceException:
-                        # Re-find the element if it becomes stale
-                        delegate_element = WebDriverWait(self.driver, timeout=5).until(
-                            EC.element_to_be_clickable((By.LINK_TEXT, "Continue"))
-                        )
+                print('Delagation Page found')
+                try:
+                    continue_button = WebDriverWait(driver, timeout).until(
+                        EC.element_to_be_clickable((By.XPATH, "//a[text()='Continue' and @bh='HL']")))
+                    print("Continue button found.")
+                    for _ in range(100):
+                        continue_button.click()
+                except TimeoutException:
+                    print('Continue button cant find')
             except TimeoutException:
                 print("User didn't delegate the account")
         
@@ -500,7 +501,7 @@ class Ariba_Auto:
             continue_button.click()
         except TimeoutException:
             print('User dont have OK confirmation')
-        WebDriverWait(driver,timeout)
+        WebDriverWait(driver,timeout=5)
         driver.maximize_window()
         if flag==0:
             actions = [
@@ -1016,6 +1017,12 @@ class Ariba_Auto:
 
         print(f"Formatted Excel file saved to {file_path}")
     
+    def get_latest_files(self,dir,n=2):
+        list_of_files=glob.glob(os.path.join(Directory,'*.xlsx'))
+        latest_files=sorted(list_of_files,key=os.path.getatime,reverse=True)[:n]
+        return latest_files 
+
+
     def email_send(self,cat_name,attachment_path,mode=1):
         if mode==1:
             cat_df=self.cat_tracker_get()
@@ -1040,6 +1047,10 @@ class Ariba_Auto:
             
             # Attach the file
             mail.Attachments.Add(attachment_path)
+            #attach 2 more catlogue files
+            latest_files=self.get_latest_files(self.download_dir,2)
+            for file in latest_files:
+                mail.Attachments.Add(file)
             mail.Display()
             # Send the email
             #mail.Send()
