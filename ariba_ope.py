@@ -18,14 +18,7 @@ import win32com.client as win32
 
 
 
-ARIBA_URL="http://covestro-child1.procurement-eu.ariba.com/"
-ARIBA_ADMIN_DIC={'CVTWX':'cassie.song@covestro.com','CVSBZ':'charlotte.chen@covestro.com','CXGUQ':'michelle.zhang@covestro.com','CVSYX':'peng.gao@covestro.com'}
-ARIBA_ADMIN_LIST=['CVTWX','CVSBZ','CXGUQ']
-CURRENCY_LISTS=['USD','EUR','TWD','CNY','JPY','HKD','THB']
-EXCLUDE_TYPE_LISTS=['Punchout L2','Punchout L1','WIP Work in Progress']
-CAT_REGION=['APAC','CN','HK','JP','TH','TW']
-STANDARD_COLUMNS = ['Supplier ID', 'Supplier Part ID', 'Item Description', 'Unit Price',
-            'Unit of Measure', 'Short Name','Domain', 'Value','Lead Time','Currency' ]
+
 
 class Ariba_Auto:
     def __init__(self):
