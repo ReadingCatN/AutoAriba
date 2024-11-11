@@ -486,7 +486,12 @@ class Ariba_Auto:
                         EC.element_to_be_clickable((By.XPATH, "//a[text()='Continue' and @bh='HL']")))
                     print("Continue button found.")
                     for _ in range(100):
-                        continue_button.click()
+                        try:
+                            continue_button.click()
+                        except StaleElementReferenceException:
+                            continue_button = WebDriverWait(driver, timeout).until(EC.element_to_be_clickable((By.XPATH, "//a[text()='Continue' and @bh='HL']")))
+                            continue_button.click()
+
                 except TimeoutException:
                     print('Continue button cant find')
             except TimeoutException:
@@ -498,7 +503,11 @@ class Ariba_Auto:
             continue_button = WebDriverWait(driver, timeout).until(
                 EC.presence_of_element_located((By.ID, "_bf7aib")))
         # Click the button
-            continue_button.click()
+            try:
+                continue_button.click()
+            except StaleElementReferenceException:
+                continue_button = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.ID, "_bf7aib")))
+                continue_button.click()
         except TimeoutException:
             print('User dont have OK confirmation')
         WebDriverWait(driver,timeout=5)
