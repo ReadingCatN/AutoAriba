@@ -16,7 +16,13 @@ import pandas as pd
 import tkinter as tk
 import win32com.client as win32
 
-
+ARIBA_URL=""
+ARIBA_ADMIN_DIC={}
+ARIBA_ADMIN_LIST=[]
+CURRENCY_LISTS=[]
+EXCLUDE_TYPE_LISTS=[]
+CAT_REGION=[]
+STANDARD_COLUMNS = []
 
 
 
